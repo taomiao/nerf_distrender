@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from render.python.modules.models.tensorBase import TensorBase
+from tensorBase import TensorBase
 
 
 class TensorVMSplit_multi(TensorBase):

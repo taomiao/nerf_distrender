@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torch.nn
 import torch.nn.functional as F
-from render.python.modules.models.nerf import NeRF
-from utils.utils import TVLoss, positional_encoding, raw2alpha, st
+from nerf import NeRF
+from utils import TVLoss, positional_encoding, raw2alpha
 
 
 class AlphaGridMask(torch.nn.Module):
@@ -192,8 +192,6 @@ class TensorBase(torch.nn.Module):
         print("init run_nerf", self.nerf)
 
     def update_stepSize(self, gridSize):
-        print("", flush=True)
-        print(st.GREEN + "grid size" + st.RESET, gridSize, flush=True)
         self.aabbSize = self.aabb[1] - self.aabb[0]
         self.invaabbSize = 2.0 / self.aabbSize
         self.gridSize = torch.LongTensor(gridSize).to(self.device)
@@ -201,11 +199,6 @@ class TensorBase(torch.nn.Module):
         self.stepSize = torch.mean(self.units) * self.step_ratio
         self.aabbDiag = torch.sqrt(torch.sum(torch.square(self.aabbSize)))
         self.nSamples = int((self.aabbDiag / self.stepSize).item()) + 1
-        print(
-            st.BLUE + f"sample step size: {self.stepSize:.3f} unit" + st.RESET,
-            flush=True,
-        )
-        print(st.BLUE + f"default number: {self.nSamples}" + st.RESET, flush=True)
 
     def get_kwargs(self):
         return {
@@ -493,6 +486,7 @@ class TensorBase(torch.nn.Module):
             _, weight, _ = raw2alpha(sigma, dists * self.distance_scale, profiler=profiler)
 
             app_mask = weight > self.rayMarch_weight_thres
+
             if app_mask.any():
                 app_features = self.compute_appfeature(xyz_sampled[app_mask], profiler=profiler)
                 fake_xyz_sampled_idxs = torch.zeros(xyz_sampled.shape[:-1])
