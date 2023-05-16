@@ -1,9 +1,10 @@
-import torch
 import os
-from config import models_repo
-from model_manager.model import Model
 import sys
 
+import torch
+
+from config import models_repo
+from model_manager.model import Model
 from model_optimization.opted_model import OptedModel
 
 

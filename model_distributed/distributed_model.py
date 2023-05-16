@@ -1,9 +1,10 @@
+import os
+
 import torch
 from torch.nn.parallel import DistributedDataParallel
 
 from model_pipeline.piped_model import ModelPipe
 from model_pipeline.seq_model import ModelSeq
-import os
 
 
 class DistModel:
@@ -24,8 +25,7 @@ class DistModel:
 
 if __name__ == "__main__":
     with torch.no_grad():
-        sm = ModelSeq()
-        sm.load_from_name("model_test", do_opt=True)
+        sm = ModelSeq().load_from_name("model_test", do_opt=True)
         pm = ModelPipe().to_pipe(sm)
         dm = DistModel().to_distributed(pm)
         inp = torch.rand([1, 128]).cuda()

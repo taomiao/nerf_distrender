@@ -1,6 +1,4 @@
 import torch
-import torch._dynamo as dynamo
-from typing import List
 
 
 class OptStage:
@@ -8,10 +6,13 @@ class OptStage:
     def optimize(self, model: torch.nn.Module):
         pass
 
+
 class InductorStage(OptStage):
     def optimize(self, model: torch.nn.Module):
         opt_model = torch.compile(model)
         return opt_model
+
+
 class OptPipeline:
     def __init__(self):
         self.opt_stages = []

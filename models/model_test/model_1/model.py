@@ -1,9 +1,12 @@
 import torch
 
+
 def load_model():
     print("loading ...")
     m = ModelFront().cuda()
     return m
+
+
 class ModelFront(torch.nn.Module):
     def __init__(self):
         super(ModelFront, self).__init__()
@@ -16,9 +19,8 @@ class ModelFront(torch.nn.Module):
 
 import os
 import torch._dynamo.config
-import logging
 
-if __name__=="__main__":
+if __name__ == "__main__":
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '29500'
     os.environ['RANK'] = '0'
@@ -26,7 +28,7 @@ if __name__=="__main__":
     # torch.distributed.rpc.init_rpc('worker', rank=0, world_size=1)
     torch.distributed.init_process_group(backend="nccl", init_method="env://")
 
-    #m = ToyModel().cuda()
+    # m = ToyModel().cuda()
     m = ModelFront().cuda()
     m = torch.nn.parallel.DistributedDataParallel(m, static_graph=False)
     m.compile()
