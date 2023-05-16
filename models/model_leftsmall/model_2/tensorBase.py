@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torch.nn
 import torch.nn.functional as F
-from render.python.modules.models.nerf import NeRF
-from utils.utils import TVLoss, positional_encoding, raw2alpha, st
+from nerf import NeRF
+from utils import TVLoss, positional_encoding, raw2alpha, st
 
 
 class AlphaGridMask(torch.nn.Module):

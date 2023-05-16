@@ -1,8 +1,8 @@
 import sys
 
-from config import models_repo
+from config import config
 
-
+models_repo = config["models_repo"]
 class Model:
     def __init__(self):
         sys.path.append(models_repo)
@@ -16,8 +16,3 @@ class Model:
         if cls_name:
             m_class = getattr(mod, cls_name)
         return model, m_class
-
-
-if __name__ == "__main__":
-    m = Model()
-    m.load_from_path_and_name("model_test.model_1.model", "ModelFront")

@@ -3,9 +3,11 @@ import sys
 
 import torch
 
-from config import models_repo
-from model_manager.model import Model
+from config import config
+from seq_model.model import Model
 from model_optimization.opted_model import OptedModel
+
+models_repo = config["models_repo"]
 
 
 class ModelSeq:
@@ -30,9 +32,3 @@ class ModelSeq:
         self.seq_model = seq_model
         return seq_model
 
-
-if __name__ == "__main__":
-    sm = ModelSeq().load_from_name("model_test", do_opt=True)
-    inp = torch.rand([1, 128]).cuda()
-    res = sm(inp)
-    print(res)

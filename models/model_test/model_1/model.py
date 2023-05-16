@@ -14,7 +14,7 @@ class ModelFront(torch.nn.Module):
         self.relu = torch.nn.ReLU()
 
     def forward(self, inp):
-        return self.linear(inp)
+        return self.relu(self.linear(inp))
 
 
 import os

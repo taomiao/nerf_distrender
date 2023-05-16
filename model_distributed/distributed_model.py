@@ -4,7 +4,7 @@ import torch
 from torch.nn.parallel import DistributedDataParallel
 
 from model_pipeline.piped_model import ModelPipe
-from model_pipeline.seq_model import ModelSeq
+from seq_model.seq_model import ModelSeq
 
 
 class DistModel:
@@ -21,13 +21,3 @@ class DistModel:
         ddp_model = DistributedDataParallel(model)
         self.ddp_model = ddp_model
         return ddp_model
-
-
-if __name__ == "__main__":
-    with torch.no_grad():
-        sm = ModelSeq().load_from_name("model_test", do_opt=True)
-        pm = ModelPipe().to_pipe(sm)
-        dm = DistModel().to_distributed(pm)
-        inp = torch.rand([1, 128]).cuda()
-        res = dm(inp)
-        print(res.to_here())

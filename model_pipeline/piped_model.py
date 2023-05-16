@@ -3,7 +3,7 @@ import os
 import torch
 from torch.distributed.pipeline.sync.pipe import Pipe
 
-from model_pipeline.seq_model import ModelSeq
+from seq_model.seq_model import ModelSeq
 
 
 class ModelPipe:
@@ -18,10 +18,3 @@ class ModelPipe:
         self.piped_model = piped_model
         return piped_model
 
-
-if __name__ == "__main__":
-    sm = ModelSeq().load_from_name("model_test", do_opt=True)
-    pm = ModelPipe().to_pipe(sm)
-    inp = torch.rand([1, 128]).cuda()
-    res = pm(inp)
-    print(res.to_here())
