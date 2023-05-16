@@ -16,8 +16,8 @@ class ModelPipe:
 
 if __name__=="__main__":
     sm = ModelSeq()
-    sm.load_from_name("model_test")
+    sm.load_from_name("model_test", do_opt=True)
     pm = ModelPipe().to_pipe(sm)
     inp = torch.rand([1, 128]).cuda()
     res = pm(inp)
-    print(res)
+    print(res.to_here())
