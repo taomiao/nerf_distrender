@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
-from render.python.modules.models.tensorBase import TensorBase
+from tensorBase import TensorBase
 
 
-class TensorVMSplit_multi(TensorBase):
+class TensorVMSplit(TensorBase):
     """
-    TensoRF VM multi-resolution plane
+    TensoRF VM
     """
 
     def __init__(self, aabb, gridSize, device, **kargs):
@@ -14,65 +14,24 @@ class TensorVMSplit_multi(TensorBase):
     def init_svd_volume(self, device):
         self.density_plane, self.density_line = self.init_one_svd(self.density_n_comp, self.gridSize, 0.1, device)
         self.app_plane, self.app_line = self.init_one_svd(self.app_n_comp, self.gridSize, 0.1, device)
-        self.basis_mat = torch.nn.Linear(sum(self.app_n_comp) * len(self.resMode), self.app_dim, bias=False).to(device)
+        self.basis_mat = torch.nn.Linear(sum(self.app_n_comp), self.app_dim, bias=False).to(device)
         if self.nonlinear_density:
-            self.basis_den = torch.nn.Linear(sum(self.density_n_comp) * len(self.resMode), 1, bias=False).to(device)
-        if self.args.encode_app:
-            self.embedding_app = torch.nn.Embedding(11500, 48).to(device)
-        print("density_plane:", self.density_plane)
-        print("density_line:", self.density_line)
+            self.basis_den = torch.nn.Linear(sum(self.density_n_comp), 1, bias=False).to(device)
+            # self.basis_den = torch.nn.Sequential(
+            #     torch.nn.Linear(sum(self.density_n_comp), 128, bias=False),
+            #     torch.nn.ReLU(),
+            #     torch.nn.Linear(128, 1, bias=False),
+            # ).to(device)
 
     def init_one_svd(self, n_component, gridSize, scale, device):
         plane_coef, line_coef = [], []
-        if self.args.ckpt is None:  # set gridsize de novo
-            for i in range(len(self.vecMode)):
-                vec_id = self.vecMode[i]
-                mat_id_0, mat_id_1 = self.matMode[i]
-                for j in self.resMode:
-                    plane_coef.append(
-                        torch.nn.Parameter(
-                            scale
-                            * torch.randn(
-                                (
-                                    1,
-                                    n_component[i],
-                                    gridSize[mat_id_1] * j,
-                                    gridSize[mat_id_0] * j,
-                                )
-                            )
-                        )
-                    )  #
-                    line_coef.append(
-                        torch.nn.Parameter(scale * torch.randn((1, n_component[i], gridSize[vec_id] * j, 1)))
-                    )
-        else:
-            # set gridsize according to ckpt, since the scale relationship between different planes is broken
-            # when using merged ckpts trained by plane parallel
-            ckpt = torch.load(self.args.ckpt, map_location=self.args.device)
-            for i in range(len(self.vecMode)):
-                vec_id = self.vecMode[i]
-                mat_id_0, mat_id_1 = self.matMode[i]
-                for j in range(len(self.resMode)):
-                    planeSize = ckpt["state_dict"][f"density_plane.{j}"].shape[
-                        -2:
-                    ]  # just need to use density plane to get both density/app plane size
-                    plane_coef.append(
-                        torch.nn.Parameter(scale * torch.randn((1, n_component[i], planeSize[0], planeSize[1])))
-                    )
-                    line_coef.append(
-                        torch.nn.Parameter(
-                            scale
-                            * torch.randn(
-                                (
-                                    1,
-                                    n_component[i],
-                                    gridSize[vec_id] * self.resMode[j],
-                                    1,
-                                )
-                            )
-                        )
-                    )
-            del ckpt
+        for i in range(len(self.vecMode)):
+            vec_id = self.vecMode[i]
+            mat_id_0, mat_id_1 = self.matMode[i]
+            plane_coef.append(
+                torch.nn.Parameter(scale * torch.randn((1, n_component[i], gridSize[mat_id_1], gridSize[mat_id_0])))
+            )  #
+            line_coef.append(torch.nn.Parameter(scale * torch.randn((1, n_component[i], gridSize[vec_id], 1))))
         return torch.nn.ParameterList(plane_coef).to(device), torch.nn.ParameterList(line_coef).to(device)
 
     # obtimization
@@ -84,8 +43,6 @@ class TensorVMSplit_multi(TensorBase):
             {"params": self.app_plane, "lr": lr_init_spatial},
             {"params": self.basis_mat.parameters(), "lr": lr_init_network},
         ]
-        if self.args.encode_app:
-            grad_vars += [{"params": self.embedding_app.parameters(), "lr": lr_init_network}]
         if self.nonlinear_density:
             grad_vars += [{"params": self.basis_den.parameters(), "lr": lr_init_network}]
         if isinstance(self.renderModule, torch.nn.Module):
@@ -109,17 +66,15 @@ class TensorVMSplit_multi(TensorBase):
         if self.nonlinear_density or return_feat:
             plane_coef_point, line_coef_point = [], []
         sigma_feature = torch.zeros((xyz_sampled.shape[0],), device=xyz_sampled.device)
-
         for idx_plane in range(len(self.density_plane)):
-            idx_dim = idx_plane // len(self.resMode)
             plane_coef = F.grid_sample(
                 self.density_plane[idx_plane],
-                coordinate_plane[[idx_dim]],
+                coordinate_plane[[idx_plane]],
                 align_corners=True,
             ).view(-1, *xyz_sampled.shape[:1])
             line_coef = F.grid_sample(
                 self.density_line[idx_plane],
-                coordinate_line[[idx_dim]],
+                coordinate_line[[idx_plane]],
                 align_corners=True,
             ).view(-1, *xyz_sampled.shape[:1])
             if self.nonlinear_density or return_feat:
@@ -132,7 +87,6 @@ class TensorVMSplit_multi(TensorBase):
             sigma_feature = F.relu(self.basis_den((plane_coef_point * line_coef_point).T))[  # pylint: disable=E1102
                 ..., 0
             ]
-
         if return_feat:
             ret = (plane_coef_point * line_coef_point).T
             if profiler is not None:
@@ -155,39 +109,32 @@ class TensorVMSplit_multi(TensorBase):
             torch.stack((torch.zeros_like(coordinate_line), coordinate_line), dim=-1).detach().view(N, -1, 1, 2)
         )
         plane_coef_point, line_coef_point = [], []
-
-        # for idx_plane in range(len(self.app_plane)):
         for idx_plane in range(len(self.app_plane)):
-            idx_dim = idx_plane // len(self.resMode)
             plane_coef_point.append(
                 F.grid_sample(
                     self.app_plane[idx_plane],
-                    coordinate_plane[[idx_dim]],
+                    coordinate_plane[[idx_plane]],
                     align_corners=True,
                 ).view(-1, *xyz_sampled.shape[:-1])
             )
             line_coef_point.append(
                 F.grid_sample(
                     self.app_line[idx_plane],
-                    coordinate_line[[idx_dim]],
+                    coordinate_line[[idx_plane]],
                     align_corners=True,
                 ).view(-1, *xyz_sampled.shape[:1])
             )
         plane_coef_point, line_coef_point = torch.cat(plane_coef_point), torch.cat(line_coef_point)
-
         if return_feat:
-            ret1 = self.basis_mat((plane_coef_point * line_coef_point).T)  # pylint: disable=E1102
-            ret2 = (plane_coef_point * line_coef_point).T
+            ret = (plane_coef_point * line_coef_point).T
             if profiler is not None:
                 profiler.op_time_collect_end("render_test::evaluation::render_image::render_fn::compute_appfeature")
-            return ret1, ret2
-
-        ret = self.basis_mat((plane_coef_point * line_coef_point).T)  # pylint: disable=E1102
+            return self.basis_mat((plane_coef_point * line_coef_point).T), ret  # pylint: disable=E1102
 
         if profiler is not None:
             profiler.op_time_collect_end("render_test::evaluation::render_image::render_fn::compute_appfeature")
 
-        return ret
+        return self.basis_mat((plane_coef_point * line_coef_point).T)  # pylint: disable=E1102
 
     # upsample/update grids
     @torch.no_grad()
@@ -195,25 +142,22 @@ class TensorVMSplit_multi(TensorBase):
         for i in range(len(self.vecMode)):
             vec_id = self.vecMode[i]
             mat_id_0, mat_id_1 = self.matMode[i]
-            for j in self.resMode:
-                plane_idx = i * len(self.resMode) + self.resMode.index(j)
-                plane_coef[plane_idx] = torch.nn.Parameter(
-                    F.interpolate(
-                        plane_coef[plane_idx].data,
-                        size=(res_target[mat_id_1] * j, res_target[mat_id_0] * j),
-                        mode="bilinear",
-                        align_corners=True,
-                    )
+            plane_coef[i] = torch.nn.Parameter(
+                F.interpolate(
+                    plane_coef[i].data,
+                    size=(res_target[mat_id_1], res_target[mat_id_0]),
+                    mode="bilinear",
+                    align_corners=True,
                 )
-                line_coef[plane_idx] = torch.nn.Parameter(
-                    F.interpolate(
-                        line_coef[plane_idx].data,
-                        size=(res_target[vec_id] * j, 1),
-                        mode="bilinear",
-                        align_corners=True,
-                    )
+            )
+            line_coef[i] = torch.nn.Parameter(
+                F.interpolate(
+                    line_coef[i].data,
+                    size=(res_target[vec_id], 1),
+                    mode="bilinear",
+                    align_corners=True,
                 )
-
+            )
         return plane_coef, line_coef
 
     @torch.no_grad()
@@ -222,7 +166,6 @@ class TensorVMSplit_multi(TensorBase):
         self.density_plane, self.density_line = self.up_sampling_VM(self.density_plane, self.density_line, res_target)
         self.update_stepSize(res_target)
         print(f"upsamping to {res_target}")
-        print(self.density_plane)
 
     @torch.no_grad()
     def shrink(self, new_aabb):

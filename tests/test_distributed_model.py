@@ -8,7 +8,7 @@ from seq_model.model import Model
 from seq_model.seq_model import ModelSeq
 
 
-class TestModel(TestCase):
+class TestDistModel(TestCase):
 
     def test_distributed_model(self):
         with torch.no_grad():

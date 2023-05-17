@@ -4,7 +4,7 @@ from model_manager.model_manager import ModelManager
 from seq_model.model import Model
 
 
-class TestModel(TestCase):
+class TestModelManager(TestCase):
 
     def test_model_load(self):
         mm = ModelManager()

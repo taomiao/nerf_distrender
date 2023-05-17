@@ -1,3 +1,4 @@
+import os.path
 import sys
 
 from config import config
@@ -9,6 +10,9 @@ class Model:
 
     @staticmethod
     def load_from_path_and_name(path, cls_name=None):
+        s_path = "/".join(path.split(".")[:-1])
+        s_path = os.path.join(models_repo, s_path)
+        sys.path.append(s_path)
         mod = __import__(path, fromlist=["load_model"])
         load_model = getattr(mod, "load_model")
         model = load_model()

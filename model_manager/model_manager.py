@@ -23,3 +23,6 @@ class ModelManager:
                     model = DistModel().to_distributed(model)
                 self.models[m_name] = model
         print(self.models)
+
+    def get_model_by_name(self, model_name):
+        return self.models[model_name]

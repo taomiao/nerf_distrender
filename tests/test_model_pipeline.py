@@ -6,7 +6,7 @@ from model_pipeline.piped_model import ModelPipe
 from seq_model.seq_model import ModelSeq
 
 
-class TestModel(TestCase):
+class TestModelPipe(TestCase):
 
     def test_model_pipeline(self):
         sm = ModelSeq().load_from_name("model_test", do_opt=True)
