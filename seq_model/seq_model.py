@@ -26,7 +26,7 @@ class ModelSeq:
         self.models = []
         self.seq_model = None
 
-    def load_from_name(self, name, do_opt=False):
+    def load_from_name(self, name, do_opt=False) -> torch.nn.Sequential:
         path = os.path.join(models_repo, name)
         dirs = sorted(os.listdir(path))
         for d_name in dirs:
