@@ -3,8 +3,9 @@ import numpy as np
 import torch
 import torch.nn
 import torch.nn.functional as F
+
 from nerf import NeRF
-from utils import TVLoss, positional_encoding, raw2alpha
+from utils import TVLoss, positional_encoding
 
 
 class AlphaGridMask(torch.nn.Module):
@@ -98,27 +99,27 @@ class TensorBase(torch.nn.Module):
     """
 
     def __init__(  # pylint: disable=W0102
-        self,
-        aabb,
-        gridSize,
-        device,
-        density_n_comp=8,
-        appearance_n_comp=24,
-        app_dim=27,
-        shadingMode="MLP_PE",
-        alphaMask=None,
-        near_far=[2.0, 6.0],
-        density_shift=-10,
-        alphaMask_thres=0.001,
-        distance_scale=25,
-        rayMarch_weight_thres=0.001,
-        pos_pe=6,
-        view_pe=6,
-        fea_pe=6,
-        featureC=128,
-        step_ratio=2.0,
-        fea2denseAct="softplus",
-        args=None,
+            self,
+            aabb,
+            gridSize,
+            device,
+            density_n_comp=8,
+            appearance_n_comp=24,
+            app_dim=27,
+            shadingMode="MLP_PE",
+            alphaMask=None,
+            near_far=[2.0, 6.0],
+            density_shift=-10,
+            alphaMask_thres=0.001,
+            distance_scale=25,
+            rayMarch_weight_thres=0.001,
+            pos_pe=6,
+            view_pe=6,
+            fea_pe=6,
+            featureC=128,
+            step_ratio=2.0,
+            fea2denseAct="softplus",
+            args=None,
     ):
         super().__init__()
 
@@ -444,148 +445,31 @@ class TensorBase(torch.nn.Module):
         return alpha
 
     def forward(
-        self,
-        rays_chunk,
-        white_bg=True,
-        is_train=False,
-        N_samples=-1,
-        profiler=None,
+            self,
+            xyz_sampled, view_dirs, weight, app_mask, z_vals
     ):
-        rays_o = rays_chunk[:, :3]
-        viewdirs = rays_chunk[:, 3:6]
-        print("##########", self.near_far, self.stepSize, self.aabb)
-        if self.n_level > 2:
-            xyz_sampled, z_vals, ray_valid = self.sample_ray_within_hull(
-                rays_o,
-                viewdirs,
-                is_train=is_train,
-                N_samples=self.n_importance,
-                profiler=profiler,
+        rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
+        if app_mask.any():
+            app_features = self.compute_appfeature(xyz_sampled[app_mask])
+            fake_xyz_sampled_idxs = torch.zeros(xyz_sampled.shape[:-1])
+            if self.args.encode_app:
+                app_latent = self.embedding_app(fake_xyz_sampled_idxs[app_mask])
+            else:
+                app_latent = None
+            valid_rgbs = self.renderModule(
+                view_dirs[app_mask],
+                app_features,
+                app_latent
             )
-            dists = torch.cat(
-                (z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])),
-                dim=-1,
-            )
-            viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
-            if self.alphaMask is not None:
-                alphas = self.alphaMask.sample_alpha(xyz_sampled[ray_valid], profiler=profiler)
-                alpha_mask = alphas > 0
-                ray_invalid = ~ray_valid
-                ray_invalid[ray_valid] |= ~alpha_mask
-                ray_valid = ~ray_invalid
+            rgb[app_mask] = valid_rgbs
+        acc_map = torch.sum(weight, -1)
+        rgb_map = torch.sum(weight[..., None] * rgb, -2)
+        white_bg = False
+        if white_bg:
+            rgb_map = rgb_map + (1.0 - acc_map[..., None])
+        rgb_map = rgb_map.clamp(0, 1)
 
-            sigma = torch.zeros(xyz_sampled.shape[:-1], device=xyz_sampled.device)
-            rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
-            print("&&&&&", ray_valid.any())
-            if ray_valid.any():
-                xyz_sampled = self.normalize_coord(xyz_sampled, profiler=profiler)
-                sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], profiler=profiler)
-                validsigma = self.feature2density(sigma_feature, profiler=profiler)
-                sigma[ray_valid] = validsigma
+        with torch.no_grad():
+            depth_map = torch.sum(weight * z_vals, -1)
 
-            _, weight, _ = raw2alpha(sigma, dists * self.distance_scale, profiler=profiler)
-
-            app_mask = weight > self.rayMarch_weight_thres
-
-            if app_mask.any():
-                app_features = self.compute_appfeature(xyz_sampled[app_mask], profiler=profiler)
-                fake_xyz_sampled_idxs = torch.zeros(xyz_sampled.shape[:-1])
-                if self.args.encode_app:
-                    app_latent = self.embedding_app(fake_xyz_sampled_idxs[app_mask])
-                else:
-                    app_latent = None
-                valid_rgbs = self.renderModule(
-                    viewdirs[app_mask],
-                    app_features,
-                    app_latent,
-                    profiler=profiler,
-                )
-                rgb[app_mask] = valid_rgbs
-            acc_map = torch.sum(weight, -1)
-            rgb_map = torch.sum(weight[..., None] * rgb, -2)
-
-            if profiler is not None:
-                profiler.samples_collect(
-                    xyz_sampled,
-                    sigma[ray_valid].shape[0],
-                    rgb[app_mask].shape[0],
-                    ray_valid,
-                )
-
-            if white_bg or (is_train and torch.rand((1,)) < 0.5):
-                rgb_map = rgb_map + (1.0 - acc_map[..., None])
-            rgb_map = rgb_map.clamp(0, 1)
-
-            with torch.no_grad():
-                depth_map = torch.sum(weight * z_vals, -1)
-
-            outputs = (rgb_map, depth_map)
-
-        else:
-            # dense sample
-            xyz_sampled, z_vals, ray_valid = self.sample_ray(
-                rays_o,
-                viewdirs,
-                is_train=is_train,
-                N_samples=N_samples,
-                profiler=profiler,
-            )
-            print("****", ray_valid.any())
-            dists = torch.cat(
-                (z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])),
-                dim=-1,
-            )
-            viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
-
-            if self.alphaMask is not None:
-                alphas = self.alphaMask.sample_alpha(xyz_sampled[ray_valid], profiler=profiler)
-                alpha_mask = alphas > 0
-                ray_invalid = ~ray_valid
-                ray_invalid[ray_valid] |= ~alpha_mask
-                ray_valid = ~ray_invalid
-
-            sigma = torch.zeros(xyz_sampled.shape[:-1], device=xyz_sampled.device)
-            rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
-            print("&&&&&", ray_valid.any())
-            if ray_valid.any():
-                xyz_sampled = self.normalize_coord(xyz_sampled, profiler=profiler)
-                sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], profiler=profiler)
-
-                validsigma = self.feature2density(sigma_feature, profiler=profiler)
-                sigma[ray_valid] = validsigma
-
-            _, weight, _ = raw2alpha(sigma, dists * self.distance_scale, profiler=profiler)
-
-            app_mask = weight > self.rayMarch_weight_thres
-
-            if app_mask.any():
-                app_features = self.compute_appfeature(xyz_sampled[app_mask], profiler=profiler)
-
-                valid_rgbs = self.renderModule(
-                    viewdirs[app_mask],
-                    app_features,
-                    profiler=profiler,
-                )
-                rgb[app_mask] = valid_rgbs
-
-            if profiler is not None:
-                profiler.samples_collect(
-                    xyz_sampled,
-                    sigma[ray_valid].shape[0],
-                    rgb[app_mask].shape[0],
-                    ray_valid,
-                )
-
-            acc_map = torch.sum(weight, -1)
-            rgb_map = torch.sum(weight[..., None] * rgb, -2)
-
-            if white_bg or (is_train and torch.rand((1,)) < 0.5):
-                rgb_map = rgb_map + (1.0 - acc_map[..., None])
-
-            rgb_map = rgb_map.clamp(0, 1)
-            with torch.no_grad():
-                depth_map = torch.sum(weight * z_vals, -1)
-
-            outputs = (rgb_map, depth_map)
-
-        return outputs
+        return rgb_map, depth_map

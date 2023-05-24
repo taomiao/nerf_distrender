@@ -3,15 +3,21 @@ config = {
     "models": {
         "model_test": {
             "load": False,
-            "do_opt": True,
+            "do_opt": False,
+            "use_pipe": False,
+            "use_ddp": False
+        },
+        "model_leftsmall": {
+            "load": False,
+            "do_opt": False,
+            "use_pipe": False,
+            "use_ddp": False
+        },
+        "model_leftsmall_multi_stages": {
+            "load": True,
+            "do_opt": False,
             "use_pipe": True,
             "use_ddp": True
         },
-        "model_leftsmall": {
-            "load": True,
-            "do_opt": True,
-            "use_pipe": True,
-            "use_ddp": True
-        }
     }
 }

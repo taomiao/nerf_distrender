@@ -15,7 +15,7 @@ class DistModel:
         os.environ['RANK'] = '0'
         os.environ['WORLD_SIZE'] = '1'
         # torch.distributed.rpc.init_rpc('worker', rank=0, world_size=1)
-        torch.distributed.init_process_group(backend="nccl", init_method="env://")
+        torch.distributed.init_process_group(backend="gloo", init_method="env://")
 
     def to_distributed(self, model):
         ddp_model = DistributedDataParallel(model)

@@ -10,7 +10,8 @@ def load_model():
 class ModelEnd(torch.nn.Module):
     def __init__(self):
         super(ModelEnd, self).__init__()
-        self.fc2 = torch.nn.Linear(64, 2)
+        self.fc2 = torch.nn.Linear(192, 2)
 
-    def forward(self, inp):
+    def forward(self, inp1, inp2, inp3):
+        inp = torch.cat([inp1, inp2, inp3])
         return self.fc2(inp)

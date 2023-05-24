@@ -12,9 +12,10 @@ class ModelFront(torch.nn.Module):
         super(ModelFront, self).__init__()
         self.linear = torch.nn.Linear(128, 64)
         self.relu = torch.nn.ReLU()
+        self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, inp):
-        return self.relu(self.linear(inp))
+    def forward(self, inp1, inp2):
+        return self.relu(self.linear(inp1)), self.relu(self.linear(inp2)), self.sigmoid(self.linear(inp2))
 
 
 import os

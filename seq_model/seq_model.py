@@ -10,6 +10,16 @@ from model_optimization.opted_model import OptedModel
 models_repo = config["models_repo"]
 
 
+class SequentialMultiInput(torch.nn.Sequential):
+    def forward(self, *inputs):
+        for module in self._modules.values():
+            if type(inputs) == tuple:
+                inputs = module(*inputs)
+            else:
+                inputs = module(inputs)
+        return inputs
+
+
 class ModelSeq:
     def __init__(self):
         sys.path.append(models_repo)
@@ -28,7 +38,6 @@ class ModelSeq:
             if do_opt:
                 model = OptedModel().optimize(model)
             self.models.append(model)
-        seq_model = torch.nn.Sequential(*self.models)
+        seq_model = SequentialMultiInput(*self.models)
         self.seq_model = seq_model
         return seq_model
-
