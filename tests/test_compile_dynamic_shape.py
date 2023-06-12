@@ -9,7 +9,7 @@ torch._inductor.config.debug = True
 torch._dynamo.config.verbose = True
 
 import os
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = "/home/PJLAB/taomiao/PycharmProjects/distrender/tests/inductor_codecache"
+os.environ["TORCHINDUCTOR_CACHE_DIR"] = "distrender/tests/inductor_codecache"
 
 class DynamicModel(torch.nn.Module):
     def __init__(self):

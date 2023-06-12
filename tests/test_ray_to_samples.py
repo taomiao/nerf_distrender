@@ -9,7 +9,7 @@ from render_utils.ray_to_samples import sample_ray, sample_ray_within_hull, opt_
 
 import os
 
-os.environ["TORCHINDUCTOR_CACHE_DIR"] = "/home/PJLAB/taomiao/PycharmProjects/distrender/tests/inductor_codecache"
+os.environ["TORCHINDUCTOR_CACHE_DIR"] = "distrender/tests/inductor_codecache"
 
 
 class TestRayToSamples(TestCase):
